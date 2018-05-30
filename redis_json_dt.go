@@ -1,4 +1,4 @@
-package main
+package RedisJsonGo
 
 import (
 	"encoding/binary"
@@ -8,9 +8,11 @@ import (
 	"github.com/wenerme/go-rm/rm"
 )
 
+const ModuleName = "RedisJson"
+
 func CreateDataType() rm.DataType {
-	return rm.DataType{
-		Name:   "RedisJson",
+	dt := rm.DataType{
+		Name:   ModuleName,
 		EncVer: 1,
 		Desc:   "",
 		// TODO Load and Save
@@ -40,6 +42,9 @@ func CreateDataType() rm.DataType {
 			rm.LogDebug("Digest. not implement.")
 		},
 	}
+	rm.LogDebug("AAAA %d", rm.GetModuleDataType(ModuleName))
+
+	return dt
 }
 
 type JsonData struct {

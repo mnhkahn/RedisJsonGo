@@ -1,4 +1,4 @@
-package main
+package RedisJsonGo
 
 import (
 	"encoding/json"
@@ -9,14 +9,12 @@ import (
 )
 
 var ModuleType rm.ModuleType
-
-func main() {
-	// In case someone try to run this
-	rm.Run()
-}
+var dataTypes []rm.DataType
 
 // 必须放在init里面
 func init() {
+	dataTypes = append(dataTypes, CreateDataType())
+
 	rm.Mod = CreateMyMod()
 }
 
@@ -28,7 +26,12 @@ func CreateMyMod() *rm.Module {
 		CreateCommand_JSONSET(),
 		CreateCommand_JSONGET(),
 	}
-	mod.DataTypes = []rm.DataType{CreateDataType()}
+	mod.DataTypes = dataTypes
+	mod.AfterInit = func(ctx rm.Ctx, args []rm.String) error {
+		ModuleType = rm.GetModuleDataType(ModuleName)
+		rm.LogDebug("BBB %s %d", ModuleName, (*uint64)(unsafe.Pointer(ModuleType)))
+		return nil
+	}
 	return mod
 }
 
@@ -69,6 +72,7 @@ func CreateCommand_JSONSET() rm.Command {
 				return rm.ERR
 			}
 
+			// var val *JsonData
 			raw := args[2].String()
 			rm.LogDebug("raw: %s", raw)
 
@@ -81,10 +85,16 @@ func CreateCommand_JSONSET() rm.Command {
 				return rm.ERR
 			}
 			rm.LogDebug("json %v", val)
+			rm.LogDebug("CCC %d %v", ModuleType, val)
 
-			if key.ModuleTypeSetValue(ModuleType, unsafe.Pointer(val)) == rm.ERR {
-				ctx.ReplyWithError("ERR Failed to set module type value")
-				return rm.ERR
+			if key.IsEmpty() {
+				if key.ModuleTypeSetValue(ModuleType, unsafe.Pointer(val)) == rm.ERR {
+					ctx.ReplyWithError("ERR Failed to set module type value")
+					return rm.ERR
+				}
+			} else {
+				valOld := (*JsonData)(key.ModuleTypeGetValue())
+				valOld.data = val.data
 			}
 
 			ctx.ReplyWithString(args[2])
@@ -110,12 +120,12 @@ func CreateCommand_JSONGET() rm.Command {
 			if !ok {
 				return rm.ERR
 			}
-
+			rm.LogDebug("=============")
 			val := (*JsonData)(key.ModuleTypeGetValue())
 			rm.LogDebug("raw: %v", val)
 
 			if val == nil || val.data == nil {
-				ctx.ReplyWithSimpleString("data is nil.")
+				ctx.ReplyWithNull()
 				return rm.OK
 			}
 
@@ -132,8 +142,9 @@ func CreateCommand_JSONGET() rm.Command {
 				for _, arg := range args[2:] {
 					a := arg.String()
 					rm.LogDebug(a)
-
-					resMap[a] = val.data[a]
+					if v, exists := val.data[a]; exists {
+						resMap[a] = v
+					}
 				}
 			}
 
@@ -154,9 +165,9 @@ func CreateCommand_JSONGET() rm.Command {
 // open the key and make sure it is indeed a Hash and not empty
 func openHashKey(ctx rm.Ctx, k rm.String) (rm.Key, bool) {
 	key := ctx.OpenKey(k, rm.READ|rm.WRITE)
-	rm.LogDebug("keytype: %d", key.KeyType())
+	rm.LogDebug("keytype: %d %s", key.KeyType(), k.String())
 
-	if !key.IsEmpty() && key.ModuleTypeGetType() != ModuleType {
+	if key.KeyType() != rm.KEYTYPE_EMPTY && key.ModuleTypeGetType() != ModuleType {
 		ctx.ReplyWithError(rm.ERRORMSG_WRONGTYPE)
 		return rm.Key(0), false
 	}
